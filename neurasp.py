@@ -225,7 +225,8 @@ class NeurASP(object):
         return dmvpp.find_one_most_probable_SM_under_obs_noWC(obs=obs)
 
 
-    def learn(self, dataList, obsList, epoch, alpha=0, lossFunc='cross', method='exact', lr=0.01, opt=False, storeSM=False, smPickle=None, accEpoch=0, batchSize=1, bar=False):
+    def learn(self, dataList, obsList, epoch, alpha=0, lossFunc='cross', method='exact', lr=0.01, opt=False, storeSM=False, smPickle=None, 
+              accEpoch=0, batchSize=1, bar=False, test_accuracy=False, dataList_test=None, obsList_test=None):
         """
         @param dataList: a list of dictionaries, where each dictionary maps terms to either a tensor/np-array or a tuple (tensor/np-array, {'m': labelTensor})
         @param obsList: a list of strings, where each string is a set of constraints denoting an observation
@@ -263,6 +264,15 @@ class NeurASP(object):
         # we train all nerual network models
         for m in self.nnMapping:
             self.nnMapping[m].train()
+
+        if test_accuracy:
+            # Stores accuracy for each batch (for all epochs)
+            acc_test = np.zeros(epoch*(len(dataList)//batchSize)+1)
+            # Stores array position to store test accuracy
+            acc_pos = 0
+            # Computes initial accuracy
+            acc_test[acc_pos] = self.testInferenceResults(dataList_test, obsList_test)
+            acc_pos += 1
 
         # we train for 'epoch' times of epochs
         for epochIdx in range(epoch):
@@ -371,6 +381,9 @@ class NeurASP(object):
                     for m in self.optimizers:
                         self.optimizers[m].step()
                         self.optimizers[m].zero_grad()
+                    if test_accuracy:
+                        acc_test[acc_pos] = self.testInferenceResults(dataList_test, obsList_test)
+                        acc_pos += 1
 
                 # Step 4: if alpha is less than 1, we update probabilities in normal prob. rules
                 if alpha < 1:
@@ -395,6 +408,10 @@ class NeurASP(object):
                     pickle.dump(self.stableModels, fp)
                 savePickle = False
 
+        # Return test accuracy for each batch (for all epochs)
+        if test_accuracy:
+            return acc_test
+        
     def testNN(self, nn, testLoader):
         """
         Return a real number in [0,100] denoting accuracy
