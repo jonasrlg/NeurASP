@@ -15,6 +15,12 @@ from torchvision.transforms import transforms
 from network import Net, testNN
 from neurasp import NeurASP
 
+import numpy as np
+
+epochs = 5
+learning_rate = 1e-3
+batch_size = 1_000
+
 start_time = time.time()
 
 #############################
@@ -22,7 +28,6 @@ start_time = time.time()
 #############################
 
 class MNIST_Addition(Dataset):
-
     def __init__(self, dataset, examples):
         self.data = list()
         self.dataset = dataset
@@ -30,10 +35,10 @@ class MNIST_Addition(Dataset):
             for line in f:
                 line = line.strip().split(' ')
                 self.data.append(tuple([int(i) for i in line]))
-
+    
     def __len__(self):
         return len(self.data)
-
+    
     def __getitem__(self, index):
         i1, i2, l = self.data[index]
         return self.dataset[i1][0], self.dataset[i2][0], l
@@ -41,9 +46,7 @@ class MNIST_Addition(Dataset):
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081, ))])
 # used for training
 trainDataset = MNIST_Addition(torchvision.datasets.MNIST(root=dir_path+'/../data/', train=True, download=True, transform=transform), dir_path+'/../data/mnistAdd_train.txt')
-# used to check training and testing accuracy
-testLoader = torch.utils.data.DataLoader(torchvision.datasets.MNIST(root=dir_path+'/../data/', train=False, transform=transform), batch_size=1000)
-trainLoader = torch.utils.data.DataLoader(Subset(torchvision.datasets.MNIST(root=dir_path+'/../data/', train=True, transform=transform), range(1000)), batch_size=1000)
+testDataset = MNIST_Addition(torchvision.datasets.MNIST(root=dir_path+'/../data/', train=False, download=True, transform=transform), dir_path+'/../data/mnistAdd_test.txt')
 
 dataList = []
 obsList = []
@@ -51,6 +54,11 @@ for i1, i2, l in trainDataset:
     dataList.append({'i1': i1.unsqueeze(0), 'i2': i2.unsqueeze(0)})
     obsList.append(':- not addition(i1, i2, {}).'.format(l))
 
+dataList_test = []
+obsList_test = []
+for i1, i2, l in testDataset:
+    dataList_test.append({'i1': i1.unsqueeze(0), 'i2': i2.unsqueeze(0)})
+    obsList_test.append(':- not addition(i1, i2, {}).'.format(l))
 
 #############################
 # NeurASP program
@@ -68,20 +76,26 @@ nn(digit(1,X), [0,1,2,3,4,5,6,7,8,9]) :- img(X).
 
 m = Net()
 nnMapping = {'digit': m}
-optimizers = {'digit': torch.optim.Adam(m.parameters(), lr=0.001)}
+optimizers = {'digit': torch.optim.Adam(m.parameters(), lr=learning_rate)}
 NeurASPobj = NeurASP(dprogram, nnMapping, optimizers)
 
 ########
 # Start training and testing
 ########
 
-print('Start training for 1 epoch...')
-NeurASPobj.learn(dataList=dataList, obsList=obsList, epoch=1, smPickle=None, bar=True)
+print(f'Start training for {epochs} epoch(s)...')
+acc_test = NeurASPobj.learn(dataList=dataList, obsList=obsList, epoch=epochs, batchSize=batch_size,
+                 test_accuracy=True, dataList_test=dataList_test, obsList_test=obsList_test,
+                 smPickle=None, bar=True)
+np.save('MNISTadd.npy', acc_test)
 
+"""
 device = torch.device('cpu')
+
 # check testing accuracy
 accuracy, singleAccuracy = testNN(model=m, testLoader=testLoader, device=device)
 # check training accuracy
 accuracyTrain, singleAccuracyTrain = testNN(model=m, testLoader=trainLoader, device=device)
 print(f'{accuracyTrain:0.2f}\t{accuracy:0.2f}')
 print('--- total time from beginning: %s seconds ---' % int(time.time() - start_time) )
+"""
